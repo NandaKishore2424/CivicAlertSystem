@@ -127,12 +127,57 @@ class Web3Service {
    */
   async uploadToIPFS(data) {
     try {
+      if (!this.ipfs) {
+        // If projectId and projectSecret are available
+        if (projectId && projectSecret) {
+          const auth = 'Basic ' + Buffer.from(projectId + ':' + projectSecret).toString('base64');
+          this.ipfs = ipfsHttpClient({
+            host: 'ipfs.infura.io',
+            port: 5001,
+            protocol: 'https',
+            headers: {
+              authorization: auth
+            }
+          });
+        } else {
+          // Fallback to public gateway - not ideal for production!
+          this.ipfs = ipfsHttpClient({ url: 'https://ipfs.infura.io:5001/api/v0' });
+        }
+      }
+      
+      // Process media files if any
+      if (data.images && data.images.length > 0) {
+        // Array to hold CIDs of uploaded files
+        const uploadedFiles = [];
+        
+        for (const file of data.images) {
+          // Convert file to buffer
+          const buffer = await file.arrayBuffer();
+          // Upload to IPFS
+          const result = await this.ipfs.add(buffer);
+          
+          uploadedFiles.push({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            cid: result.path
+          });
+        }
+        
+        // Replace raw file objects with metadata
+        data.images = uploadedFiles;
+      }
+      
+      // Convert data object to JSON string
       const jsonData = JSON.stringify(data);
-      const added = await ipfsClient.add(jsonData);
-      return added.path;
+      
+      // Upload JSON to IPFS
+      const result = await this.ipfs.add(jsonData);
+      
+      return result.path; // Returns the IPFS hash (CID)
     } catch (error) {
       console.error("Error uploading to IPFS:", error);
-      throw error;
+      throw new Error(`Failed to upload to IPFS: ${error.message}`);
     }
   }
 
@@ -169,12 +214,12 @@ class Web3Service {
         instructions: alertData.instructions,
         additionalInfo: alertData.additionalInfo,
         images: alertData.images,
-        documents: alertData.documents
+        timestamp: alertData.timestamp
       });
       
       // Convert geo coordinates to integers (multiplied by 10^6 for precision)
-      const latitude = Math.round(parseFloat(alertData.latitude) * 1000000);
-      const longitude = Math.round(parseFloat(alertData.longitude) * 1000000);
+      const latitude = Math.round(alertData.latitude * 1000000);
+      const longitude = Math.round(alertData.longitude * 1000000);
       
       // Create alert on blockchain
       const tx = await this.civicAlertContract.createAlert(
@@ -203,7 +248,7 @@ class Web3Service {
       }
       
       return {
-        alertId,
+        alertId: alertId.toString(),
         ipfsHash,
         qrCodeId,
         txHash: receipt.transactionHash
