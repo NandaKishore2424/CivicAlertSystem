@@ -134,6 +134,10 @@
 
 // export default Navbar;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
 import React from 'react'
 
 const Navbar = () => {

@@ -3,14 +3,19 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
+<<<<<<< HEAD
 import { useLocation } from 'react-router-dom';
 
+=======
+import './index.css';  // This should import the compiled Tailwind CSS file
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
 import Navbar from './pages/NavBar'
 
 // Pages
+<<<<<<< HEAD
 import HomePage from './pages/HomePage';
 import AlertFeedPage from './pages/AlertFeedPage';
 import AlertDetailPage from './pages/AlertDetailPage';
@@ -21,6 +26,16 @@ import NotFoundPage from './pages/NotFoundPage';
 import SignupUser from './components/login/SignupUser';
 import SignupOfficial from './components/login/SignupOfficial';
 import Signin from './components/login/Signin'
+=======
+import AlertFeedPage from './pages/CitizenDashboard/AlertFeedPage';
+import AlertDetailPage from './pages/CitizenDashboard/AlertDetailPage'; // Correct import
+import AlertMapPage from './pages/CitizenDashboard/AlertMapPage';
+import QRScannerPage from './pages/CitizenDashboard/QRScannerPage';
+import Dashboard from './pages/CitizenDashboard/Dashboard1';
+import Dashboard2 from './pages/GovnDashboard/Dashboard2';
+import Givealert from './pages/GovnDashboard/Givealert';
+import ResourceRequests from './pages/CitizenDashboard/ResourceRequests';
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
 
 function App() {
   const location = useLocation();  // **Access current route**
@@ -35,6 +50,7 @@ function App() {
 
         <Routes>
           <Route path="/" element={<MainLayout />}>
+<<<<<<< HEAD
             <Route index element={<HomePage />} />
             <Route path="signin" element={<Signin />} />
             <Route path="signupofficial" element={<SignupOfficial />} />
@@ -45,6 +61,18 @@ function App() {
             <Route path="scanner" element={<QRScannerPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="*" element={<NotFoundPage />} />
+=======
+            <Route index element={<Dashboard />} />
+            <Route path="AlertFeedPage" element={<AlertFeedPage />} />
+            {/* Updated Route for AlertDetailsPage */}
+            <Route path="alert/:id" element={<AlertDetailPage />} />
+            <Route path="AlertMapPage" element={<AlertMapPage />} />
+            <Route path="QRScannerPage" element={<QRScannerPage />} />
+            <Route path="GovernmentDashboard" element={<Dashboard2 />} />
+            <Route path="Givealert" element={<Givealert />} />
+            <Route path="ResourceRequests" element={<ResourceRequests />} />
+            {/* <Route path="*" element={<NotFoundPage />} /> */}
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
           </Route>
         </Routes>
       <ToastContainer position="bottom-right" />

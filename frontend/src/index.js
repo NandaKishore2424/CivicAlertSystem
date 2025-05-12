@@ -17,10 +17,12 @@
 // reportWebVitals();
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css';
 import App from './App';
+<<<<<<< HEAD
 import reportWebVitals from './reportWebVitals';
 import { BrowserRouter } from 'react-router-dom'; // 🧠 import BrowserRouter
+=======
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -30,5 +32,8 @@ root.render(
     </BrowserRouter>
   </React.StrictMode>
 );
+<<<<<<< HEAD
 
 reportWebVitals();
+=======
+>>>>>>> f89a8e7447686554cf7682c6bde524b5ab1c06e3
