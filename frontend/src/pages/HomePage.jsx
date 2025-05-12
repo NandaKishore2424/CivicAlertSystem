@@ -13,16 +13,28 @@ const HomePage = () => {
         <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
           Get verified, transparent, and tamper-proof emergency alerts powered by blockchain technology
         </p>
-        <div className="flex flex-wrap justify-center gap-4">
+        <div className="flex flex-wrap justify-center gap-4 mb-4">
           <Link to="/alerts" className="btn-primary">
             View Alerts
           </Link>
-          <Link to="/map" className="btn bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600">
+          <Link
+            to="/map"
+            className="btn bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
+          >
             Open Alert Map
           </Link>
         </div>
+        {/* New Login & Signup Buttons */}
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link to="/signin" className="btn bg-blue-600 text-white hover:bg-blue-700">
+            Login
+          </Link>
+          <Link to="/signup" className="btn bg-green-600 text-white hover:bg-green-700">
+            Signup
+          </Link>
+        </div>
       </div>
-      
+
       {/* Features Section */}
       <div className="grid md:grid-cols-3 gap-8 my-16">
         <div className="card">
@@ -53,7 +65,7 @@ const HomePage = () => {
           </p>
         </div>
       </div>
-      
+
       {/* Recent Alerts Preview */}
       <div className="my-16">
         <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Recent Alerts</h2>
@@ -80,7 +92,9 @@ const HomePage = () => {
             <span className="text-sm text-gray-500">1 day ago</span>
           </div>
           <div className="bg-gray-50 dark:bg-gray-700 py-3 text-center">
-            <Link to="/alerts" className="text-primary-600 hover:underline dark:text-primary-500">View all alerts →</Link>
+            <Link to="/alerts" className="text-primary-600 hover:underline dark:text-primary-500">
+              View all alerts →
+            </Link>
           </div>
         </div>
       </div>
