@@ -5,23 +5,13 @@ import QRCodeManagerABI from '../contracts/QRCodeManager.json';
 import { create as ipfsHttpClient } from 'ipfs-http-client';
 
 // Contract addresses - these would be different based on deployment network
-const CIVIC_ALERT_ADDRESS = process.env.REACT_APP_CIVIC_ALERT_ADDRESS || "0x0000000000000000000000000000000000000000";
-const IPFS_STORAGE_ADDRESS = process.env.REACT_APP_IPFS_STORAGE_ADDRESS || "0x0000000000000000000000000000000000000000";
-const QR_CODE_MANAGER_ADDRESS = process.env.REACT_APP_QR_CODE_MANAGER_ADDRESS || "0x0000000000000000000000000000000000000000";
+const CIVIC_ALERT_ADDRESS = process.env.REACT_APP_CIVIC_ALERT_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
+const IPFS_STORAGE_ADDRESS = process.env.REACT_APP_IPFS_STORAGE_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+const QR_CODE_MANAGER_ADDRESS = process.env.REACT_APP_QR_CODE_MANAGER_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 // IPFS configuration with project id and secret (from Infura or similar service)
 const projectId = process.env.REACT_APP_IPFS_PROJECT_ID;
 const projectSecret = process.env.REACT_APP_IPFS_PROJECT_SECRET;
-const auth = 'Basic ' + Buffer.from(projectId + ':' + projectSecret).toString('base64');
-
-const ipfsClient = ipfsHttpClient({
-  host: 'ipfs.infura.io',
-  port: 5001,
-  protocol: 'https',
-  headers: {
-    authorization: auth,
-  },
-});
 
 class Web3Service {
   constructor() {
@@ -34,6 +24,7 @@ class Web3Service {
     this.networkId = null;
     this.isGovernmentAuthority = false;
     this.isAdmin = false;
+    this.ipfs = null;
   }
 
   /**
@@ -44,13 +35,13 @@ class Web3Service {
       // Check if MetaMask is installed
       if (window.ethereum) {
         // Create Web3 provider using the injected provider
-        this.provider = new ethers.providers.Web3Provider(window.ethereum);
+        this.provider = new ethers.BrowserProvider(window.ethereum);
         
         // Request account access if needed
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         // Get the signer
-        this.signer = this.provider.getSigner();
+        this.signer = await this.provider.getSigner();
         
         // Get user address
         this.address = await this.signer.getAddress();
@@ -352,8 +343,13 @@ class Web3Service {
    */
   async getAlertByQrCode(qrCodeId) {
     try {
-      const alert = await this.civicAlertContract.getAlertByQrCode(qrCodeId);
-      return this.getAlertById(alert.id);
+      const [isValid, alertId] = await this.qrCodeManagerContract.validateQRCode(qrCodeId);
+      
+      if (!isValid) {
+        throw new Error("Invalid QR code");
+      }
+      
+      return this.getAlertById(alertId);
     } catch (error) {
       console.error("Error fetching alert by QR code:", error);
       throw error;

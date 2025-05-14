@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { FiClock, FiMapPin, FiAlertTriangle, FiCheck, FiMap, FiUser, FiArrowLeft, FiShare2 } from 'react-icons/fi';
+import { Clock, MapPin, AlertTriangle, ChevronLeft, Shield, AlertCircle, Bell, Loader, CheckCircle, Map, Share2 } from 'lucide-react';
 import { useWeb3 } from '../../context/Web3Context';
 import { toast } from 'react-toastify';
+import { useAlerts } from '../../context/AlertsContext';
+import { demoAlerts } from '../../data/demoAlerts';
 
 // Fix Leaflet icon issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -15,64 +16,127 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-// Create custom icons for different alert types
-const createCustomIcon = (alertType) => {
-  const colors = {
-    0: 'red', // Emergency
-    1: 'orange', // Warning
-    2: 'blue', // Info
-    3: 'green', // Safe
-  };
-  
-  const color = colors[alertType] || 'gray';
-  
-  return new L.Icon({
-    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
-  });
-};
+// IPFS error retry component
+const IpfsErrorWithRetry = ({ onRetry, section }) => (
+  <div className="mt-6 bg-red-50 border border-red-100 rounded-lg p-4 flex flex-col items-center">
+    <AlertCircle className="h-6 w-6 text-red-500 mb-2" />
+    <h3 className="text-md font-semibold text-red-700 mb-1">Failed to load {section}</h3>
+    <p className="text-red-600 text-sm mb-3">The detailed information could not be retrieved</p>
+    <button 
+      onClick={onRetry}
+      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm"
+    >
+      Retry
+    </button>
+  </div>
+);
 
-const AlertDetailsPage = () => {
+// Add this prop to your function signature
+const AlertDetailPage = ({ preSelectedAlert }) => {
+  const navigate = useNavigate();
   const { alertId } = useParams();
+  const isDemo = alertId?.startsWith('demo-') || preSelectedAlert;
   const { getAlertById, changeAlertStatus, isGovernmentAuthority, isAdmin, web3Service } = useWeb3();
+  const { getCachedAlert, cacheAlert } = useAlerts();
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ipfsContent, setIpfsContent] = useState(null);
+  const [ipfsLoading, setIpfsLoading] = useState(false);
+  const [ipfsError, setIpfsError] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [userLocation, setUserLocation] = useState(null);
+
+  // Fetch IPFS content
+  const fetchIpfsContent = useCallback(async (ipfsHash) => {
+    if (!ipfsHash) return null;
+    
+    try {
+      setIpfsLoading(true);
+      setIpfsError(false);
+      const ipfsData = await web3Service.fetchFromIPFS(ipfsHash);
+      return ipfsData;
+    } catch (error) {
+      console.error("Error fetching IPFS content:", error);
+      setIpfsError(true);
+      return null;
+    } finally {
+      setIpfsLoading(false);
+    }
+  }, [web3Service]);
 
   const fetchAlert = useCallback(async () => {
     if (!alertId) return;
     
+    // Check cache first
+    const cachedAlert = getCachedAlert(alertId);
+    if (cachedAlert && (Date.now() - cachedAlert.timestamp < 300000)) { // 5 min cache
+      setAlert(cachedAlert);
+      setIpfsContent(cachedAlert.ipfsContent);
+      setLoading(false);
+      return;
+    }
+    
+    // Otherwise fetch from API
     try {
       setLoading(true);
       const alertData = await getAlertById(alertId);
-      setAlert(alertData);
       
-      // Fetch extended data from IPFS if available
-      if (alertData?.ipfsHash) {
-        try {
-          const ipfsData = await web3Service.fetchFromIPFS(alertData.ipfsHash);
+      if (alertData) {
+        setAlert(alertData);
+        setLoading(false);
+        
+        // Fetch IPFS content in the background
+        if (alertData.ipfsHash) {
+          const ipfsData = await fetchIpfsContent(alertData.ipfsHash);
           setIpfsContent(ipfsData);
-        } catch (error) {
-          console.error("Failed to fetch IPFS content:", error);
+          
+          // Cache both alert and IPFS data
+          cacheAlert(alertId, { ...alertData, ipfsContent: ipfsData });
+        } else {
+          cacheAlert(alertId, { ...alertData, ipfsContent: null });
         }
+      } else {
+        setLoading(false);
       }
     } catch (error) {
       console.error("Error fetching alert:", error);
-      toast.error("Failed to load alert details");
-    } finally {
       setLoading(false);
+      toast.error("Failed to load alert details");
     }
-  }, [alertId, getAlertById, web3Service]);
+  }, [alertId, getAlertById, getCachedAlert, cacheAlert, fetchIpfsContent]);
 
   useEffect(() => {
-    fetchAlert();
-    
+    if (preSelectedAlert) {
+      // Use the provided alert directly
+      setAlert(preSelectedAlert);
+      setIpfsContent({
+        description: preSelectedAlert.description,
+        instructions: preSelectedAlert.instructions,
+        additionalInfo: preSelectedAlert.additionalInfo
+      });
+      setLoading(false);
+    } else if (isDemo) {
+      // Load demo alert from the imported data
+      const foundAlert = demoAlerts.find(alert => alert.id === alertId);
+      if (foundAlert) {
+        setAlert(foundAlert);
+        setIpfsContent({
+          description: foundAlert.description,
+          instructions: foundAlert.instructions,
+          additionalInfo: foundAlert.additionalInfo
+        });
+        setLoading(false);
+      } else {
+        setLoading(false);
+      }
+    } else {
+      // Fetch real alert
+      fetchAlert();
+    }
+  }, [alertId, isDemo, fetchAlert, preSelectedAlert]);
+
+  useEffect(() => {
     // Get user's location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -87,7 +151,7 @@ const AlertDetailsPage = () => {
         }
       );
     }
-  }, [fetchAlert]);
+  }, []);
 
   const handleMarkSafe = async () => {
     if (!isGovernmentAuthority && !isAdmin) {
@@ -140,216 +204,280 @@ const AlertDetailsPage = () => {
       });
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+  // Find alert type icon
+  const getAlertTypeIcon = (alertType) => {
+    switch (parseInt(alertType)) {
+      case 0: return <AlertTriangle className="h-5 w-5" />;
+      case 1: return <AlertCircle className="h-5 w-5" />;
+      case 2: return <Bell className="h-5 w-5" />;
+      case 3: return <Shield className="h-5 w-5" />;
+      default: return <AlertCircle className="h-5 w-5" />;
+    }
+  };
+
+  // Replace the current loading state with a more detailed skeleton UI
+
+if (loading) {
+  return (
+    <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 animate-pulse">
+      {/* Back button placeholder */}
+      <div className="h-8 w-24 bg-slate-200 rounded mb-6"></div>
+      
+      {/* Main alert card skeleton */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="h-12 bg-slate-100 border-b border-slate-200"></div>
+        
+        <div className="p-6">
+          {/* Title placeholder */}
+          <div className="h-8 w-3/4 bg-slate-200 rounded mb-4"></div>
+          
+          {/* Info line placeholders */}
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="h-5 w-32 bg-slate-200 rounded"></div>
+            <div className="h-5 w-40 bg-slate-200 rounded"></div>
+          </div>
+          
+          {/* Description placeholder */}
+          <div className="space-y-2 mb-6">
+            <div className="h-4 w-full bg-slate-200 rounded"></div>
+            <div className="h-4 w-full bg-slate-200 rounded"></div>
+            <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
+          </div>
+        </div>
       </div>
-    );
-  }
+      
+      {/* Map skeleton */}
+      <div className="mt-6 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="h-6 w-24 bg-slate-200 rounded"></div>
+        </div>
+        <div className="h-96 bg-slate-100"></div>
+      </div>
+    </div>
+  );
+}
 
   if (!alert) {
     return (
-      <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="card text-center py-12">
-          <FiAlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Alert Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-6">
+      <div className="max-w-4xl mx-auto py-8 px-6">
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
+          <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2 text-slate-900">Alert Not Found</h2>
+          <p className="text-slate-600 mb-6">
             The alert you're looking for doesn't exist or has been removed.
           </p>
-          <Link to="/alerts" className="btn-primary">
-            View All Alerts
-          </Link>
+          <div className="flex justify-center">
+            <Link to="/alerts" className="bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-4 rounded-md font-medium shadow-sm transition-colors">
+              View All Alerts
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   // Format timestamp
-  const alertDate = new Date(Number(alert.timestamp) * 1000).toLocaleString();
+  const alertDate = new Date(Number(isDemo ? alert.timestamp : alert.timestamp * 1000)).toLocaleString();
   
   // Get status color and text
-  let statusColor = "bg-alert-info";
   let statusText = "Informational";
+  let statusBgColor = "bg-blue-50";
+  let statusTextColor = "text-blue-700";
+  let statusBorderColor = "border-blue-200";
   
   switch (parseInt(alert.status)) {
     case 0:
-      statusColor = "bg-alert-emergency";
       statusText = "Active Emergency";
+      statusBgColor = "bg-red-50";
+      statusTextColor = "text-red-700";
+      statusBorderColor = "border-red-200";
       break;
     case 1:
-      statusColor = "bg-alert-safe";
       statusText = "Resolved";
+      statusBgColor = "bg-green-50";
+      statusTextColor = "text-green-700";
+      statusBorderColor = "border-green-200";
       break;
     case 2:
-      statusColor = "bg-gray-500";
       statusText = "Expired";
+      statusBgColor = "bg-gray-50";
+      statusTextColor = "text-gray-700";
+      statusBorderColor = "border-gray-200";
+      break;
+    default:
+      statusText = "Informational";
+      statusBgColor = "bg-blue-50";
+      statusTextColor = "text-blue-700";
+      statusBorderColor = "border-blue-200";
       break;
   }
 
-  // Get alert type text
+  // Get alert type text and styling
   let typeText = "Information";
+  let typeColor = "bg-blue-500";
+  
   switch (parseInt(alert.alertType)) {
     case 0:
       typeText = "Emergency";
+      typeColor = "bg-red-500";
       break;
     case 1:
       typeText = "Warning";
+      typeColor = "bg-amber-500";
       break;
     case 2:
       typeText = "Information";
+      typeColor = "bg-blue-500";
       break;
     case 3:
       typeText = "Safe";
+      typeColor = "bg-green-500";
+      break;
+    default:
+      typeText = "Unknown Type";
+      typeColor = "bg-slate-500";
       break;
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      <div className="card">
-        <div className="mb-6">
-          <span className={`${statusColor} text-white text-xs px-2.5 py-1 rounded-full mr-2`}>
-            {statusText}
-          </span>
-          <span className={`bg-gray-700 text-white text-xs px-2.5 py-1 rounded-full`}>
-            {typeText}
-          </span>
-        </div>
-        
-        <h1 className="text-3xl font-bold mb-3 text-gray-900 dark:text-white">{alert.title}</h1>
-        
-        <div className="flex flex-wrap gap-4 mb-6 text-sm text-gray-500">
+    <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6">
+      {/* Back button */}
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center text-slate-600 hover:text-slate-900 mb-6 transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4 mr-1" />
+        <span>Back to alerts</span>
+      </button>
+      
+      {/* Priority content - always shows immediately */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {/* Status bar at top */}
+        <div className={`${statusBgColor} ${statusTextColor} px-6 py-3 border-b ${statusBorderColor} flex items-center justify-between`}>
           <div className="flex items-center">
-            <FiClock className="mr-1" />
-            <span>{alertDate}</span>
+            {getAlertTypeIcon(alert.alertType)}
+            <span className="ml-2 font-semibold">{statusText} - {typeText}</span>
           </div>
-          <div className="flex items-center">
-            <FiMapPin className="mr-1" />
-            <span>{alert.location}</span>
+          <div className="flex space-x-2">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeColor} text-white`}>
+              {typeText}
+            </span>
           </div>
         </div>
         
-        <div className="prose dark:prose-invert max-w-none mb-6">
-          {ipfsContent ? (
-            <>
-              <p>{ipfsContent.description}</p>
-              
-              {ipfsContent.instructions && ipfsContent.instructions.length > 0 && (
-                <>
-                  <h3>Instructions</h3>
-                  <ul>
-                    {ipfsContent.instructions.map((instruction, idx) => (
-                      <li key={idx}>{instruction}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              
-              {ipfsContent.additionalInfo && (
-                <>
-                  <h3>Additional Information</h3>
-                  <p>{ipfsContent.additionalInfo}</p>
-                </>
-              )}
-              
-              {ipfsContent.images && ipfsContent.images.length > 0 && (
-                <>
-                  <h3>Media</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ipfsContent.images.map((image, idx) => (
-                      <a 
-                        key={idx} 
-                        href={`https://ipfs.io/ipfs/${image.cid}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="border dark:border-gray-700 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                      >
-                        {image.type.startsWith('image/') ? (
-                          <img 
-                            src={`https://ipfs.io/ipfs/${image.cid}`} 
-                            alt={image.name}
-                            className="rounded w-full h-32 object-cover" 
-                          />
-                        ) : (
-                          <div className="h-32 flex items-center justify-center">
-                            <div className="text-center">
-                              <p className="font-medium">{image.name}</p>
-                              <p className="text-xs text-gray-500">{Math.round(image.size / 1024)} KB</p>
-                            </div>
-                          </div>
-                        )}
-                      </a>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          ) : (
-            <p className="text-gray-600 dark:text-gray-300">
-              {alert.description || "No detailed description available."}
-            </p>
-          )}
-        </div>
-        
-        <div className="border-t dark:border-gray-700 pt-4 mt-6">
-          <div className="flex justify-between items-center">
-            <button 
-              className="btn-primary flex items-center"
-              onClick={handleMarkSafe}
-              disabled={isUpdating || alert.status === 1 || (!isGovernmentAuthority && !isAdmin)}
-            >
-              {isUpdating ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </>
-              ) : alert.status === 1 ? (
-                <>
-                  <FiCheck className="mr-1" /> Already Safe
-                </>
-              ) : (
-                <>
-                  <FiCheck className="mr-1" /> Mark as Safe
-                </>
-              )}
-            </button>
-            <Link to={`/map?alert=${alertId}`} className="btn bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <FiMap className="mr-1" /> View on Map
-            </Link>
-            <button 
-              className="btn bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center"
-              onClick={handleShare}
-            >
-              <FiShare2 className="mr-1" /> Share
-            </button>
+        {/* Alert content - core information */}
+        <div className="p-6">
+          <h1 className="text-2xl font-bold mb-4 text-slate-900">{alert.title}</h1>
+          
+          <div className="flex flex-wrap gap-4 mb-6 text-sm text-slate-500">
+            <div className="flex items-center">
+              <Clock className="h-4 w-4 mr-1.5 text-slate-400" />
+              <span>{alertDate}</span>
+            </div>
+            <div className="flex items-center">
+              <MapPin className="h-4 w-4 mr-1.5 text-slate-400" />
+              <span>{alert.location}</span>
+            </div>
+          </div>
+          
+          {/* Description - core information */}
+          <div className="prose max-w-none mb-6">
+            <div className="text-slate-700">
+              {ipfsContent?.description || alert.description || "No description available."}
+            </div>
+            
+            {/* Secondary content that loads progressively */}
+            {/* ... instructions, additional info, media sections with loading states ... */}
           </div>
         </div>
       </div>
-      {userLocation && (
-        <div className="mt-8">
-          <MapContainer center={[alert.latitude, alert.longitude]} zoom={13} style={{ height: "400px", width: "100%" }}>
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            <Marker position={[alert.latitude, alert.longitude]} icon={createCustomIcon(alert.alertType)}>
-              <Popup>
-                {alert.title} <br /> {alert.location}
-              </Popup>
-            </Marker>
-            <Marker position={[userLocation.lat, userLocation.lng]} icon={createCustomIcon(3)}>
-              <Popup>
-                Your Location
-              </Popup>
-            </Marker>
-          </MapContainer>
+
+      {/* Add this after the main content section */}
+
+      {/* Instructions section */}
+      {ipfsLoading ? (
+        <div className="mt-6 bg-slate-50 border border-slate-100 rounded-lg p-4 flex items-center justify-center">
+          <Loader className="h-5 w-5 text-slate-400 animate-spin mr-2" />
+          <span className="text-slate-500">Loading safety instructions...</span>
+        </div>
+      ) : ipfsError ? (
+        <IpfsErrorWithRetry
+          section="safety instructions"
+          onRetry={() => {
+            if (alert?.ipfsHash) {
+              fetchIpfsContent(alert.ipfsHash)
+                .then(data => setIpfsContent(data));
+            }
+          }}
+        />
+      ) : (
+        ipfsContent?.instructions && ipfsContent.instructions.length > 0 && (
+          <div className="mt-6 bg-slate-50 border border-slate-100 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">Safety Instructions</h3>
+            <ul className="space-y-2">
+              {ipfsContent.instructions.map((instruction, idx) => (
+                <li key={idx} className="flex items-start">
+                  <div className="flex-shrink-0 h-5 w-5 text-emerald-500 mt-0.5">
+                    <CheckCircle className="h-5 w-5" />
+                  </div>
+                  <span className="ml-2 text-slate-700">{instruction}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      )}
+
+      {/* Map button */}
+      {alert.latitude && alert.longitude && (
+        <div className="mt-6 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6 flex flex-col items-center">
+            <div className="text-center mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">View on Map</h2>
+              <p className="text-slate-500 text-sm mt-1">See the exact location of this alert</p>
+            </div>
+            <button
+              onClick={() => navigate(`/map?alert=${alertId}&lat=${alert.latitude}&lng=${alert.longitude}&type=${alert.alertType}&title=${encodeURIComponent(alert.title)}`)}
+              className="bg-slate-900 hover:bg-slate-800 text-white py-3 px-6 rounded-lg flex items-center justify-center font-medium transition-colors"
+            >
+              <Map className="h-5 w-5 mr-2" /> Open Map View
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Actions footer */}
+      <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 mt-6">
+        <div className="flex flex-wrap gap-3 justify-end">
+          <button 
+            className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              isUpdating || alert.status === 1 || (!isGovernmentAuthority && !isAdmin)
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-emerald-500 text-white shadow-sm hover:bg-emerald-600'
+            }`}
+            onClick={handleMarkSafe}
+            disabled={isUpdating || alert.status === 1 || (!isGovernmentAuthority && !isAdmin)}
+          >
+            {alert.status === 1 ? (
+              <>
+                <CheckCircle className="h-4 w-4 mr-1.5" /> Already Resolved
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4 mr-1.5" /> Mark as Resolved
+              </>
+            )}
+          </button>
+          <button 
+            className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-md text-sm font-medium flex items-center transition-colors shadow-sm"
+            onClick={handleShare}
+          >
+            <Share2 className="h-4 w-4 mr-1.5" /> Share
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default AlertDetailsPage;
+export default AlertDetailPage;

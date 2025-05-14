@@ -2,87 +2,79 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertCircle, Map, QrCode, Search, 
-  PlusCircle, ChevronDown, Bell, Menu,
-  MapPin, Clock, AlertTriangle
+  AlertCircle, Map, QrCode,  
+  ChevronDown, Bell, Menu, ChevronRight,
+  MapPin, Clock, AlertTriangle, 
+  PanelLeftClose, Home, Settings, LogOut,
+  Wallet
 } from "lucide-react";
 import { useWeb3 } from "../../context/Web3Context";
 import { toast } from "react-toastify";
+import { useAlerts } from '../../context/AlertsContext';
+import { demoAlerts } from '../../data/demoAlerts';
+import WalletConnection from '../../components/wallet/WalletConnection';
 
 const features = [
   {
-    title: "Alert Feed",
-    icon: <Bell className="w-6 h-6 text-black" />,
-    path: "/alerts",
-    points: [
-      "List of recent alerts",
-      "Filter by type or severity",
-      "Detailed alert information"
-    ],
-    color: "bg-white border-gray-200"
+    title: "Home",
+    icon: <Home className="w-5 h-5" />,
+    path: "/citizen/dashboard",
+    badge: null
   },
   {
-    title: "Alert Details",
-    icon: <Search className="w-6 h-6 text-black" />,
+    title: "Alert Feed",
+    icon: <Bell className="w-5 h-5" />,
     path: "/alerts",
-    points: [
-      "Full alert description",
-      "Location mapping",
-      "Safety instructions"
-    ],
-    color: "bg-white border-gray-200"
+    badge: "New"
   },
   {
     title: "Alert Map",
-    icon: <Map className="w-6 h-6 text-black" />,
+    icon: <Map className="w-5 h-5" />,
     path: "/map",
-    points: [
-      "Real-time alerts visualization",
-      "Interactive map interface",
-      "Geospatial filtering"
-    ],
-    color: "bg-white border-gray-200"
+    badge: null
   },
   {
     title: "Resource Network",
-    icon: "🔄",
+    icon: <AlertCircle className="w-5 h-5" />,
     path: "/resource-requests",
-    points: [
-      "Request essential supplies",
-      "Connect donors with needs",
-      "Inventory management",
-      "Logistics coordination"
-    ],
-    color: "bg-green-500/10 border border-green-200"
+    badge: "5"
   },
   {
     title: "QR Scanner",
-    icon: <QrCode className="w-6 h-6 text-black" />,
+    icon: <QrCode className="w-5 h-5" />,
     path: "/scanner",
-    points: [
-      "Location-based scanning",
-      "Automated data capture",
-      "Manual entry fallback"
-    ],
-    color: "bg-white border-gray-200"
+    badge: null
+  },
+  {
+    title: "Settings",
+    icon: <Settings className="w-5 h-5" />,
+    path: "/settings",
+    badge: null,
+    separator: true
+  },
+  {
+    title: "Logout",
+    icon: <LogOut className="w-5 h-5" />,
+    path: "/signin",
+    badge: null
   }
 ];
 
-// Alert type badges with different styling
+// Alert type badges with shadcn-inspired design
 const AlertTypeBadge = ({ type }) => {
   const types = {
     0: { label: "Emergency", className: "bg-red-100 text-red-800 border border-red-200" },
-    1: { label: "Warning", className: "bg-yellow-100 text-yellow-800 border border-yellow-200" },
+    1: { label: "Warning", className: "bg-amber-100 text-amber-800 border border-amber-200" },
     2: { label: "Information", className: "bg-blue-100 text-blue-800 border border-blue-200" },
-    3: { label: "Safe", className: "bg-green-100 text-green-800 border border-green-200" }
+    3: { label: "Safe", className: "bg-emerald-100 text-emerald-800 border border-emerald-200" }
   };
   
   const { label, className } = types[type] || { label: "Unknown", className: "bg-gray-100 text-gray-800" };
   
   return (
-    <span className={`px-2 py-1 rounded text-xs font-medium ${className}`}>
+    <span className={`px-2 py-1 rounded-md text-xs font-medium ${className}`}>
       {label}
     </span>
   );
@@ -90,14 +82,14 @@ const AlertTypeBadge = ({ type }) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { getAlerts, isConnected, connectWallet } = useWeb3();
+  // Add web3Service to the destructured values from useWeb3
+  const { getAlerts, isConnected, connectWallet, getAlertById, web3Service, networkId } = useWeb3();
+  // Add getCachedAlert to the destructured values from useAlerts
+  const { cacheAlert, getCachedAlert } = useAlerts();
   
-  const [userName, setUserName] = useState(() => localStorage.getItem("userName") || "Responder");
-  const [phone, setPhone] = useState(() => localStorage.getItem("phone") || "+91 •••• ••••••");
-  const [isEditing, setIsEditing] = useState(false);
-  const [tempName, setTempName] = useState(userName);
-  const [tempPhone, setTempPhone] = useState(phone);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userName] = useState(() => localStorage.getItem("userName") || "Responder");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // For mobile
   const [recentAlerts, setRecentAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
@@ -160,7 +152,7 @@ const Dashboard = () => {
                 if (Notification && Notification.permission === "granted") {
                   new Notification("Emergency Alert Nearby", {
                     body: `${nearby.title} - ${nearby.location}`,
-                    icon: "/alert-icon.png" // Make sure this exists in your public folder
+                    icon: "/alert-icon.png"
                   });
                 } else if (Notification && Notification.permission !== "denied") {
                   Notification.requestPermission().then(permission => {
@@ -191,151 +183,375 @@ const Dashboard = () => {
     fetchAlerts();
   }, [isConnected, getAlerts, userLocation]);
 
-  const handleEdit = () => setIsEditing(true);
-  const handleSave = () => {
-    setUserName(tempName);
-    setPhone(tempPhone);
-    localStorage.setItem("userName", tempName);
-    localStorage.setItem("phone", tempPhone);
-    setIsEditing(false);
-  };
-
   // Calculate distance between two points using Haversine formula
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Radius of Earth in km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const dLon = (lon1 - lon2) * (Math.PI / 180);
     const a = 
       Math.sin(dLat/2) * Math.sin(dLat/2) +
       Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+      Math.sin(dLon/2) * Math.sin(dLon/2); 
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    const distance = R * c;
+    return distance;
   };
 
+  // Helper function to format time
+  const getTimeAgo = (timestamp) => {
+    const now = new Date();
+    const diff = now - timestamp;
+    
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 60) {
+      return `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
+    } else if (hours < 24) {
+      return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    } else {
+      return `${days} day${days !== 1 ? 's' : ''} ago`;
+    }
+  };
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  // Update the prefetchAlertDetails function
+
+const prefetchAlertDetails = async (alertId) => {
+  if (alertId.startsWith('demo-')) {
+    // For demo alerts, prefetch by finding the alert in the demoAlerts array
+    const demoAlert = demoAlerts.find(a => a.id === alertId);
+    if (demoAlert) {
+      cacheAlert(alertId, { 
+        ...demoAlert, 
+        ipfsContent: {
+          description: demoAlert.description,
+          instructions: demoAlert.instructions,
+          additionalInfo: demoAlert.additionalInfo
+        },
+        timestamp: Date.now() // For cache invalidation
+      });
+    }
+    return;
+  }
+  
+  // Skip if getAlertById doesn't exist
+  if (!getAlertById || typeof getAlertById !== 'function') return;
+  
+  try {
+    // First check if it's already in cache
+    const cachedAlert = getCachedAlert(alertId);
+    if (cachedAlert && (Date.now() - cachedAlert.timestamp < 300000)) {
+      return; // Already cached and fresh
+    }
+    
+    // Fetch alert data
+    const alertData = await getAlertById(alertId);
+    if (!alertData) return;
+    
+    // Start loading IPFS data in the background, but don't wait for it
+    if (alertData.ipfsHash && web3Service) {
+      // Cache the alert immediately without IPFS content
+      cacheAlert(alertId, { ...alertData, ipfsContent: null });
+      
+      // Then fetch IPFS content in the background
+      web3Service.fetchFromIPFS(alertData.ipfsHash)
+        .then(ipfsData => {
+          // Update cache with IPFS content when it's available
+          cacheAlert(alertId, { ...alertData, ipfsContent: ipfsData });
+        })
+        .catch(error => {
+          console.error("Error prefetching IPFS content:", error);
+          // Still cache what we have
+          cacheAlert(alertId, { ...alertData, ipfsContent: null });
+        });
+    } else {
+      // Cache alert without IPFS content
+      cacheAlert(alertId, alertData);
+    }
+  } catch (error) {
+    console.error("Error prefetching alert:", error);
+  }
+};
+
+// Add this function in your Dashboard component:
+const getNetworkName = (chainId) => {
+  const networks = {
+    1: 'Ethereum',
+    5: 'Goerli',
+    11155111: 'Sepolia',
+    137: 'Polygon',
+    80001: 'Mumbai',
+    31337: 'Hardhat',
+    1337: 'Local'
+  };
+  return networks[chainId] || `Unknown (${chainId})`;
+};
+
   return (
-    <div className="flex min-h-screen bg-white text-black font-sans">
+    <div className="flex min-h-screen bg-gray-50 text-slate-900 font-sans">
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 bg-white border-b">
+      <header className="md:hidden flex items-center justify-between p-4 bg-white border-b fixed top-0 left-0 right-0 z-10 shadow-sm">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-md hover:bg-gray-100">
-          <Menu className="w-6 h-6" />
+          <Menu className="w-5 h-5" />
         </button>
-        <h1 className="text-xl font-bold">Dashboard</h1>
+        <h1 className="text-xl font-bold">Civic Alert</h1>
         <div className="w-8" />
       </header>
 
-      {/* Sidebar */}
-      <motion.div
-        initial={{ x: -20, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:static z-10 flex flex-col bg-white h-screen w-64 p-6 border-r transition-transform duration-300`}
+      {/* Collapsible Sidebar - Desktop */}
+      <aside 
+        className={`
+          hidden md:flex flex-col fixed z-20 h-screen 
+          border-r border-slate-200 bg-white transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'w-[70px]' : 'w-[280px]'}
+        `}
       >
-        <div className="flex items-center mb-8">
-          <div className="bg-black w-9 h-9 rounded-lg flex items-center justify-center mr-3 text-white">
-            <AlertCircle className="w-5 h-5" />
-          </div>
-          <h2 className="text-2xl font-bold text-black">Rescue<span className="text-gray-700">Command</span></h2>
+        <div className={`flex items-center px-4 h-16 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-2">
+              <div className="bg-slate-900 w-8 h-8 rounded-md flex items-center justify-center text-white">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <span className="font-bold text-xl">CivicAlert</span>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="bg-slate-900 w-10 h-10 rounded-md flex items-center justify-center text-white">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+          )}
+          
+          <button 
+            onClick={toggleSidebar}
+            className={`
+              p-2 rounded-md hover:bg-slate-100 transition-colors
+              ${sidebarCollapsed ? 'absolute right-[-12px] top-5 bg-white shadow-md border border-slate-200 rounded-full' : ''}
+            `}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
         </div>
 
-        <nav className="flex-1">
-          <div className="mb-6">
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-black text-white hover:bg-gray-800 transition-colors font-medium text-lg">
-              <PlusCircle className="w-5 h-5" />
-              <span>Quick Create</span>
-            </button>
-          </div>
-
-          <h3 className="text-xs uppercase tracking-widest text-gray-500 mb-4 px-2 font-semibold">Emergency Features</h3>
-          <ul className="space-y-2">
+        <nav className="flex-1 py-6 overflow-y-auto">
+          <ul className="space-y-1 px-3">
             {features.map((feature, index) => (
-              <li key={index}>
-                <button
-                  onClick={() => navigate(feature.path)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors text-left text-black text-base font-medium"
-                >
-                  {feature.icon}
-                  <span>{feature.title}</span>
-                </button>
-              </li>
+              <React.Fragment key={index}>
+                <li>
+                  <button
+                    onClick={() => {
+                      if (feature.title === "Logout") {
+                        // Clear any auth tokens if needed
+                        localStorage.removeItem("token");
+                        localStorage.removeItem("userName");
+                        // Any other cleanup needed before redirecting
+                        toast.success("Logged out successfully");
+                      }
+                      navigate(feature.path);
+                    }}
+                    className={`
+                      w-full flex items-center gap-3 py-2.5 px-3 rounded-md transition-colors
+                      ${feature.path === window.location.pathname 
+                        ? "bg-slate-100 text-slate-900 font-medium" 
+                        : feature.title === "Logout" ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-slate-100/80"
+                      }
+                    `}
+                  >
+                    <span className={`
+                      ${feature.path === window.location.pathname 
+                        ? "text-slate-900" 
+                        : feature.title === "Logout" ? "text-red-600" : "text-slate-600"
+                      }`}>
+                      {feature.icon}
+                    </span>
+                    
+                    {!sidebarCollapsed && (
+                      <>
+                        <span>{feature.title}</span>
+                        {feature.badge && (
+                          <span className={`ml-auto inline-flex items-center justify-center px-2 py-0.5 text-xs rounded-full
+                            ${feature.badge === 'New' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
+                            {feature.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </button>
+                </li>
+                {feature.separator && !sidebarCollapsed && (
+                  <li className="my-2 border-t border-slate-200"></li>
+                )}
+              </React.Fragment>
             ))}
           </ul>
         </nav>
 
-        <div className="mt-auto pt-4 border-t">
-          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-            <div className="bg-black w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold">
-              {userName.charAt(0)}
+        <div className="p-4 border-t border-slate-200">
+          {sidebarCollapsed ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex justify-center">
+                <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold">
+                  {userName.charAt(0)}
+                </div>
+              </div>
+              {/* Add wallet icon in collapsed mode */}
+              <div className="flex justify-center">
+                <button
+                  onClick={connectWallet}
+                  className="p-2 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  <Wallet className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-base font-semibold truncate">{userName}</p>
-              <p className="text-xs text-gray-500 truncate">Responder</p>
-            </div>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
-          </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-100 transition-colors cursor-pointer mb-3">
+                <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold">
+                  {userName.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{userName}</p>
+                  <p className="text-xs text-slate-500 truncate">Citizen Responder</p>
+                </div>
+                <ChevronDown className="w-4 h-4 text-slate-500" />
+              </div>
+              {/* Add wallet component here */}
+              <WalletConnection className="mt-2" />
+            </>
+          )}
         </div>
-      </motion.div>
+      </aside>
+
+      {/* Mobile Sidebar - Overlay */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden fixed inset-0 z-20 bg-black"
+            />
+            <motion.aside
+              initial={{ x: -300 }}
+              animate={{ x: 0 }}
+              exit={{ x: -300 }}
+              className="md:hidden fixed top-0 left-0 z-30 h-screen w-[280px] bg-white overflow-y-auto shadow-xl"
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center gap-2">
+                  <div className="bg-slate-900 w-8 h-8 rounded-md flex items-center justify-center text-white">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <span className="font-bold text-xl">CivicAlert</span>
+                </div>
+                <button 
+                  onClick={() => setSidebarOpen(false)} 
+                  className="p-2 rounded-md hover:bg-slate-100"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+
+              <nav className="p-4">
+                <ul className="space-y-1">
+                  {features.map((feature, index) => (
+                    <React.Fragment key={index}>
+                      <li>
+                        <button
+                          onClick={() => {
+                            if (feature.title === "Logout") {
+                              // Clear any auth tokens if needed
+                              localStorage.removeItem("token");
+                              localStorage.removeItem("userName");
+                              // Any other cleanup needed before redirecting
+                              toast.success("Logged out successfully");
+                            }
+                            navigate(feature.path);
+                            setSidebarOpen(false);
+                          }}
+                          className={`
+                            w-full flex items-center gap-3 py-2.5 px-3 rounded-md transition-colors
+                            ${feature.path === window.location.pathname 
+                              ? "bg-slate-100 text-slate-900 font-medium" 
+                              : feature.title === "Logout" ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-slate-100/80"
+                            }
+                          `}
+                        >
+                          <span className={`
+                            ${feature.path === window.location.pathname 
+                              ? "text-slate-900" 
+                              : feature.title === "Logout" ? "text-red-600" : "text-slate-600"
+                            }`}>
+                            {feature.icon}
+                          </span>
+                          <span>{feature.title}</span>
+                          {feature.badge && (
+                            <span className={`ml-auto inline-flex items-center justify-center px-2 py-0.5 text-xs rounded-full
+                              ${feature.badge === 'New' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
+                              {feature.badge}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                      {feature.separator && (
+                        <li className="my-2 border-t border-slate-200"></li>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </ul>
+              </nav>
+
+              <div className="absolute bottom-0 left-0 w-full p-4 border-t border-slate-200 bg-white">
+                <div className="flex items-center gap-3 p-2 rounded-md hover:bg-slate-100 transition-colors cursor-pointer mb-3">
+                  <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold">
+                    {userName.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{userName}</p>
+                    <p className="text-xs text-slate-500 truncate">Citizen Responder</p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                </div>
+                {/* Add wallet component here too */}
+                <WalletConnection className="mt-2" />
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
-      <div className="flex-1">
-        <motion.header
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white border-b p-6"
-        >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-black">Citizen Dashboard</h1>
-              <p className="text-gray-600 mt-1 text-base">
-                Track alerts and stay informed during emergencies
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4">
-              {isEditing ? (
-                <div className="flex gap-2">
-                  <input
-                    className="px-3 py-2 text-sm rounded border border-gray-300 focus:ring-2 focus:ring-black focus:border-transparent"
-                    value={tempName}
-                    onChange={(e) => setTempName(e.target.value)}
-                    placeholder="Name"
-                  />
-                  <input
-                    className="px-3 py-2 text-sm rounded border border-gray-300 focus:ring-2 focus:ring-black focus:border-transparent"
-                    value={tempPhone}
-                    onChange={(e) => setTempPhone(e.target.value)}
-                    placeholder="Phone"
-                  />
-                  <button
-                    onClick={handleSave}
-                    className="px-4 py-2 text-sm rounded bg-black text-white hover:bg-gray-800 font-medium"
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-base font-semibold">{userName}</p>
-                    <p className="text-sm text-gray-600">{phone}</p>
-                  </div>
-                  <button
-                    onClick={handleEdit}
-                    className="text-sm font-medium text-black hover:text-gray-700"
-                  >
-                    Edit
-                  </button>
+      <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-[70px]' : 'md:ml-[280px]'} mt-16 md:mt-0`}>
+        <main className="py-6 px-4 md:px-8 max-w-7xl mx-auto">
+          <div className="bg-white rounded-lg shadow-sm mb-6 p-6 border border-slate-200">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold mb-2">Emergency Alerts Dashboard</h1>
+                <p className="text-slate-600">Stay informed with the latest alerts in your area</p>
+              </div>
+              {isConnected && networkId && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span className="text-xs font-medium text-slate-700">{getNetworkName(networkId)}</span>
                 </div>
               )}
             </div>
           </div>
-        </motion.header>
 
-        <main className="p-6">
           {/* Nearby alert notification */}
           {showNearbyNotification && nearbyAlert && (
-            <div className="mb-8 bg-red-50 border border-red-200 rounded-lg p-4 shadow-md">
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-red-50 border-l-4 border-l-red-500 rounded-lg p-4 shadow-sm"
+            >
               <div className="flex justify-between">
                 <div className="flex items-start">
                   <AlertTriangle className="h-6 w-6 text-red-500 mr-2 flex-shrink-0" />
@@ -350,71 +566,191 @@ const Dashboard = () => {
                 <div className="flex gap-2">
                   <button 
                     onClick={() => navigate(`/alerts/${nearbyAlert.id}`)} 
-                    className="text-xs bg-red-600 text-white py-1 px-2 rounded hover:bg-red-700"
+                    className="text-xs bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700"
                   >
                     View Details
                   </button>
                   <button 
                     onClick={() => setShowNearbyNotification(false)} 
-                    className="text-xs bg-gray-200 py-1 px-2 rounded hover:bg-gray-300"
+                    className="text-xs bg-slate-200 py-1 px-3 rounded-md hover:bg-slate-300"
                   >
                     Dismiss
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
-          {/* Recent alerts section */}
+          {/* Alert Feed */}
           <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Recent Alerts</h2>
-              <button 
-                onClick={() => navigate('/alerts')} 
-                className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition-colors"
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-900">Recent Alerts</h2>
+              <button
+                onClick={() => navigate('/alerts')}
+                className="text-sm flex items-center gap-1 text-slate-600 hover:text-slate-900"
               >
-                View All
+                View all <ChevronRight className="h-4 w-4" />
               </button>
             </div>
             
             {loading ? (
               <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-black"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>
               </div>
             ) : !isConnected ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-                <p className="text-gray-600 mb-4">Connect your wallet to view emergency alerts</p>
-                <button 
-                  onClick={connectWallet}
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition"
-                >
-                  Connect Wallet
-                </button>
+              <div className="space-y-6">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-6">
+                  <p className="text-slate-600 mb-4">Connect your wallet to see real-time emergency alerts</p>
+                  <button 
+                    onClick={connectWallet}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition"
+                  >
+                    Connect Wallet
+                  </button>
+                </div>
+                
+                {/* Show demo alerts when not connected */}
+                <h3 className="text-lg font-semibold mb-3 text-slate-900">Example Alerts</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {demoAlerts.map(alert => {
+                    const timeAgo = getTimeAgo(new Date(alert.timestamp));
+                    
+                    // Map demo alert IDs to their corresponding static routes
+                    const getDemoRoute = (id) => {
+                      switch(id) {
+                        case 'demo-1': return '/demo/flood-warning';
+                        case 'demo-2': return '/demo/weather-advisory';
+                        case 'demo-3': return '/demo/road-closure';
+                        case 'demo-4': return '/demo/evacuation-lifted';
+                        default: return `/alerts/${id}`;
+                      }
+                    };
+                    
+                    return (
+                      <motion.div 
+                        key={alert.id} 
+                        onClick={() => navigate(getDemoRoute(alert.id))}
+                        whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                        className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <div className={`w-2 h-2 rounded-full mr-2 ${
+                              parseInt(alert.alertType) === 0 ? 'bg-red-500' : 
+                              parseInt(alert.alertType) === 1 ? 'bg-amber-500' : 
+                              parseInt(alert.alertType) === 2 ? 'bg-blue-500' : 
+                              'bg-emerald-500'
+                            }`}></div>
+                            <h3 className="font-bold text-lg text-slate-900">{alert.title}</h3>
+                          </div>
+                          <AlertTypeBadge type={parseInt(alert.alertType)} />
+                        </div>
+                        <p className="text-slate-600 mb-4 line-clamp-2">{alert.description}</p>
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <div className="flex items-center">
+                            <MapPin className="h-3 w-3 mr-1" />
+                            <span className="truncate max-w-[150px]">{alert.location}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            <span>{timeAgo}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               </div>
             ) : recentAlerts.length === 0 ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-700 mb-2">No Recent Alerts</h3>
-                <p className="text-gray-500">There are currently no active alerts in your area.</p>
+              <div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center mb-8">
+                  <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-700 mb-2">No Recent Alerts</h3>
+                  <p className="text-slate-500">There are currently no active alerts in your area.</p>
+                </div>
+                
+                {/* Show demo alerts as examples when no real alerts exist */}
+                <h3 className="text-lg font-semibold mb-3">Example Alerts</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {demoAlerts.map(alert => {
+                    const timestamp = new Date(parseInt(alert.timestamp));
+                    const timeAgo = getTimeAgo(timestamp);
+                    
+                    // Map demo alert IDs to their corresponding static routes
+                    const getDemoRoute = (id) => {
+                      switch(id) {
+                        case 'demo-1': return '/demo/flood-warning';
+                        case 'demo-2': return '/demo/weather-advisory';
+                        case 'demo-3': return '/demo/road-closure';
+                        case 'demo-4': return '/demo/evacuation-lifted';
+                        default: return `/alerts/${id}`;
+                      }
+                    };
+                    
+                    return (
+                      <motion.div 
+                        key={alert.id} 
+                        onClick={() => navigate(getDemoRoute(alert.id))}
+                        onMouseEnter={() => prefetchAlertDetails(alert.id)}
+                        whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                        className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <div className={`w-2 h-2 rounded-full mr-2 ${
+                              parseInt(alert.alertType) === 0 ? 'bg-red-500' : 
+                              parseInt(alert.alertType) === 1 ? 'bg-amber-500' : 
+                              parseInt(alert.alertType) === 2 ? 'bg-blue-500' : 
+                              'bg-emerald-500'
+                            }`}></div>
+                            <h3 className="font-bold text-lg text-slate-900">{alert.title}</h3>
+                          </div>
+                          <AlertTypeBadge type={parseInt(alert.alertType)} />
+                        </div>
+                        <p className="text-slate-600 mb-4 line-clamp-2">{alert.description}</p>
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <div className="flex items-center">
+                            <MapPin className="h-3 w-3 mr-1" />
+                            <span className="truncate max-w-[150px]">{alert.location}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            <span>{timeAgo}</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2">
                 {recentAlerts.map(alert => {
                   const timestamp = new Date(parseInt(alert.timestamp) * 1000);
                   const timeAgo = getTimeAgo(timestamp);
                   
                   return (
-                    <div 
+                    <motion.div 
                       key={alert.id.toString()} 
                       onClick={() => navigate(`/alerts/${alert.id}`)}
-                      className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      onMouseEnter={() => prefetchAlertDetails(alert.id)}
+                      whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                      className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-lg text-gray-900">{alert.title}</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center">
+                          <div className={`w-2 h-2 rounded-full mr-2 ${
+                            parseInt(alert.alertType) === 0 ? 'bg-red-500' : 
+                            parseInt(alert.alertType) === 1 ? 'bg-amber-500' : 
+                            parseInt(alert.alertType) === 2 ? 'bg-blue-500' : 
+                            'bg-emerald-500'
+                          }`}></div>
+                          <h3 className="font-bold text-lg text-slate-900">{alert.title}</h3>
+                        </div>
                         <AlertTypeBadge type={parseInt(alert.alertType)} />
                       </div>
-                      <p className="text-gray-600 mb-4 line-clamp-2">{alert.description || "No description available"}</p>
-                      <div className="flex justify-between text-xs text-gray-500">
+                      <p className="text-slate-600 mb-4 line-clamp-2">{alert.description || "No description available"}</p>
+                      <div className="flex justify-between text-xs text-slate-500">
                         <div className="flex items-center">
                           <MapPin className="h-3 w-3 mr-1" />
                           <span className="truncate max-w-[150px]">{alert.location}</span>
@@ -424,72 +760,16 @@ const Dashboard = () => {
                           <span>{timeAgo}</span>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
             )}
           </div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            {features.slice(0, 3).map((feature, idx) => (
-              <motion.div
-                key={idx}
-                whileHover={{ y: -5 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => navigate(feature.path)}
-                className={`cursor-pointer rounded-xl p-6 border ${feature.color} hover:shadow-md transition-all`}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-gray-100">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-xl font-bold text-black">{feature.title}</h3>
-                </div>
-                <ul className="space-y-2 text-sm text-gray-700">
-                  {feature.points.map((point, i) => (
-                    <li key={i} className="flex items-start">
-                      <span className="mr-2">•</span>
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            ))}
-          </motion.div>
         </main>
       </div>
     </div>
   );
-};
-
-// Helper function to format time ago
-const getTimeAgo = (date) => {
-  const seconds = Math.floor((new Date() - date) / 1000);
-  
-  let interval = Math.floor(seconds / 31536000);
-  if (interval > 1) return `${interval} years ago`;
-  
-  interval = Math.floor(seconds / 2592000);
-  if (interval > 1) return `${interval} months ago`;
-  
-  interval = Math.floor(seconds / 86400);
-  if (interval > 1) return `${interval} days ago`;
-  
-  interval = Math.floor(seconds / 3600);
-  if (interval > 1) return `${interval} hours ago`;
-  
-  interval = Math.floor(seconds / 60);
-  if (interval > 1) return `${interval} minutes ago`;
-  
-  return "just now";
 };
 
 export default Dashboard;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FiBell, FiMenu, FiX, FiMap, FiQrCode, FiUser } from 'react-icons/fi';
+import { FiBell, FiMenu, FiX, FiMap, FiUser } from 'react-icons/fi';
+import { FiHash as QrCodeIcon } from 'react-icons/fi';
 import { useWeb3 } from '../../context/Web3Context';
 
 const Navbar = () => {
@@ -25,14 +26,14 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="bg-white shadow-md dark:bg-gray-800">
+    <nav className="bg-slate-900 shadow-lg text-white">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <FiBell className="h-8 w-8 text-primary-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                CivicAlertChain
+              <FiBell className="h-8 w-8 text-red-500" />
+              <span className="ml-2 text-xl font-bold text-white">
+                CivicAlertSystem
               </span>
             </Link>
           </div>
@@ -41,34 +42,35 @@ const Navbar = () => {
           <div className="hidden md:flex items-center space-x-4">
             <Link 
               to="/alerts" 
-              className={`px-3 py-2 rounded-md ${
+              className={`px-3 py-2 rounded-md transition-colors ${
                 location.pathname === "/alerts" 
-                  ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  ? "bg-slate-700 text-white" 
+                  : "text-slate-200 hover:bg-slate-800"
               }`}
             >
+              <FiBell className="h-4 w-4 inline mr-2" />
               Alert Feed
             </Link>
             <Link 
               to="/map" 
-              className={`px-3 py-2 rounded-md flex items-center ${
+              className={`px-3 py-2 rounded-md transition-colors ${
                 location.pathname === "/map" 
-                  ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  ? "bg-slate-700 text-white" 
+                  : "text-slate-200 hover:bg-slate-800"
               }`}
             >
-              <FiMap className="mr-1" />
+              <FiMap className="h-4 w-4 inline mr-2" />
               Alert Map
             </Link>
             <Link 
               to="/scanner" 
-              className={`px-3 py-2 rounded-md flex items-center ${
+              className={`px-3 py-2 rounded-md transition-colors ${
                 location.pathname === "/scanner" 
-                  ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  ? "bg-slate-700 text-white" 
+                  : "text-slate-200 hover:bg-slate-800"
               }`}
             >
-              <FiQrCode className="mr-1" />
+              <QrCodeIcon className="h-4 w-4 inline mr-2" />
               QR Scanner
             </Link>
             
@@ -92,7 +94,7 @@ const Navbar = () => {
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center">
             <button 
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" 
+              className="text-white focus:outline-none" 
               onClick={toggleMenu}
             >
               {isMenuOpen ? (
@@ -106,14 +108,14 @@ const Navbar = () => {
         
         {/* Mobile menu */}
         {isMenuOpen && (
-          <div className="md:hidden py-2 pb-4">
+          <div className="md:hidden py-2 pb-4 bg-slate-800">
             <div className="flex flex-col space-y-2">
               <Link 
                 to="/alerts" 
                 className={`px-3 py-2 rounded-md ${
                   location.pathname === "/alerts" 
-                    ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    ? "bg-slate-700 text-white" 
+                    : "text-slate-200 hover:bg-slate-800"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
@@ -123,8 +125,8 @@ const Navbar = () => {
                 to="/map" 
                 className={`px-3 py-2 rounded-md ${
                   location.pathname === "/map" 
-                    ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    ? "bg-slate-700 text-white" 
+                    : "text-slate-200 hover:bg-slate-800"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
@@ -134,8 +136,8 @@ const Navbar = () => {
                 to="/scanner" 
                 className={`px-3 py-2 rounded-md ${
                   location.pathname === "/scanner" 
-                    ? "bg-gray-100 dark:bg-gray-700 text-primary-600" 
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    ? "bg-slate-700 text-white" 
+                    : "text-slate-200 hover:bg-slate-800"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
